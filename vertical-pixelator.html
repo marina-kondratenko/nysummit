@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vertical Pixelator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #0e0e0e;
+    color: #eee;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  header { margin-bottom: 1.5rem; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  p.sub { font-size: 14px; color: #888; margin-top: 4px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .sidebar {
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid #2a2a2a;
+  }
+  .ctrl { margin-bottom: 14px; }
+  .ctrl label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 4px;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ctrl-row input[type=range] { flex: 1; accent-color: #fff; }
+  .ctrl-row span { font-size: 13px; font-weight: 500; min-width: 44px; text-align: right; color: #ccc; }
+  select {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    background: #111;
+    color: #eee;
+    cursor: pointer;
+  }
+
+  .btn-row { display: flex; gap: 8px; margin-top: 1rem; flex-wrap: wrap; }
+  button {
+    flex: 1;
+    padding: 8px 14px;
+    font-size: 13px;
+    border: 1px solid #444;
+    border-radius: 8px;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:hover { background: #222; }
+  button.primary { background: #fff; color: #111; border-color: #fff; }
+  button.primary:hover { background: #ddd; }
+
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #ccc;
+    cursor: pointer;
+  }
+  .check-row input { accent-color: #fff; cursor: pointer; }
+
+  .drop-zone {
+    border: 1.5px dashed #444;
+    border-radius: 10px;
+    padding: 1.25rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    margin-bottom: 14px;
+  }
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: #888;
+    background: #222;
+  }
+  .drop-zone p { font-size: 13px; color: #aaa; line-height: 1.45; }
+  .drop-zone span { font-size: 11px; color: #666; display: block; margin-top: 4px; }
+
+  .hint {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.45;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #2a2a2a;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #555;
+    margin: 18px 0 10px;
+    padding-top: 14px;
+    border-top: 1px solid #2a2a2a;
+  }
+  .section-label:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .preview {
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #2a2a2a;
+    max-height: calc(100vh - 4rem);
+    overflow: auto;
+  }
+  #canvas-wrap {
+    border-radius: 8px;
+    overflow: hidden;
+    line-height: 0;
+    background: #000;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 320px;
+    color: #555;
+    font-size: 14px;
+    border: 1px dashed #333;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Vertical Pixelator</h1>
+  <p class="sub">Slice images into vertical colour blocks with an even brick-lay stagger between strips</p>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="drop-zone" id="dropZone">
+      <p>Drop an image here</p>
+      <span>or click to browse</span>
+      <input type="file" id="imageUpload" accept="image/*" hidden>
+    </div>
+
+    <p class="section-label">Output</p>
+
+    <div class="ctrl">
+      <label>Width</label>
+      <div class="ctrl-row">
+        <input type="range" id="outWidth" min="300" max="2000" value="900" step="50">
+        <span id="outWidth-v">900px</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Background</label>
+      <select id="bgMode">
+        <option value="black" selected>Black gaps</option>
+        <option value="white">White gaps</option>
+      </select>
+    </div>
+
+    <p class="section-label">Columns</p>
+
+    <div class="ctrl">
+      <label>Strip count</label>
+      <div class="ctrl-row">
+        <input type="range" id="stripCount" min="8" max="80" value="24" step="1">
+        <span id="stripCount-v">24</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Gap width</label>
+      <div class="ctrl-row">
+        <input type="range" id="gapWidth" min="1" max="12" value="3" step="1">
+        <span id="gapWidth-v">3px</span>
+      </div>
+    </div>
+
+    <p class="section-label">Blocks</p>
+
+    <div class="ctrl">
+      <label>Block height</label>
+      <div class="ctrl-row">
+        <input type="range" id="blockH" min="4" max="120" value="24" step="1">
+        <span id="blockH-v">24px</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label class="check-row">
+        <input type="checkbox" id="stagger" checked>
+        Stagger blocks
+      </label>
+    </div>
+
+    <div class="ctrl" id="staggerModeCtrl">
+      <label>Stagger style</label>
+      <select id="staggerMode">
+        <option value="brick" selected>Brick — alternate columns</option>
+        <option value="random">Random — each column</option>
+      </select>
+    </div>
+
+    <div class="ctrl" id="staggerAmountCtrl">
+      <label>Stagger amount</label>
+      <div class="ctrl-row">
+        <input type="range" id="staggerAmount" min="0" max="100" value="50" step="1">
+        <span id="staggerAmount-v">50%</span>
+      </div>
+    </div>
+
+    <div class="btn-row" id="reshuffleCtrl" style="margin-top:0">
+      <button type="button" onclick="reshuffleStagger()">Reshuffle random</button>
+    </div>
+
+    <p class="section-label">Texture</p>
+
+    <div class="ctrl">
+      <label>Grain</label>
+      <div class="ctrl-row">
+        <input type="range" id="grain" min="0" max="100" value="0" step="1">
+        <span id="grain-v">0%</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button type="button" onclick="applyPreset()">Default preset</button>
+    </div>
+
+    <div class="btn-row">
+      <button type="button" onclick="clearImage()">Clear</button>
+      <button type="button" class="primary" onclick="downloadPNG()">Download PNG</button>
+    </div>
+
+    <p class="hint">Each strip is divided into equal-height colour blocks. Brick stagger offsets every other column; random gives each column its own offset. Stagger amount sets how far columns can shift (50% = half a block).</p>
+  </aside>
+
+  <div class="preview">
+    <div id="canvas-wrap">
+      <div class="empty-state" id="emptyState">Upload an image to begin</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let uploadedImage = null;
+let renderTimer = null;
+let staggerSeed = 42;
+
+function val(id) { return document.getElementById(id).value; }
+function int(id) { return parseInt(val(id), 10); }
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+
+function seededRandom(s) {
+  let state = s >>> 0;
+  return function() {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function updateStaggerControls() {
+  const on = document.getElementById('stagger').checked;
+  const random = val('staggerMode') === 'random';
+  document.getElementById('staggerModeCtrl').style.display = on ? '' : 'none';
+  document.getElementById('staggerAmountCtrl').style.display = on ? '' : 'none';
+  document.getElementById('reshuffleCtrl').style.display = on && random ? '' : 'none';
+}
+
+function updateReadouts() {
+  document.getElementById('outWidth-v').textContent = val('outWidth') + 'px';
+  document.getElementById('stripCount-v').textContent = val('stripCount');
+  document.getElementById('gapWidth-v').textContent = val('gapWidth') + 'px';
+  document.getElementById('blockH-v').textContent = val('blockH') + 'px';
+  document.getElementById('staggerAmount-v').textContent = val('staggerAmount') + '%';
+  document.getElementById('grain-v').textContent = val('grain') + '%';
+  updateStaggerControls();
+}
+
+function reshuffleStagger() {
+  staggerSeed = Math.floor(Math.random() * 2147483647);
+  scheduleRender();
+}
+
+function setSlider(id, value) {
+  document.getElementById(id).value = value;
+}
+
+function updatePreviewBg() {
+  const wrap = document.getElementById('canvas-wrap');
+  wrap.style.background = val('bgMode') === 'white' ? '#fff' : '#000';
+}
+
+function applyPreset() {
+  setSlider('stripCount', 24);
+  setSlider('gapWidth', 3);
+  setSlider('blockH', 24);
+  setSlider('grain', 0);
+  document.getElementById('bgMode').value = 'black';
+  document.getElementById('stagger').checked = true;
+  document.getElementById('staggerMode').value = 'brick';
+  setSlider('staggerAmount', 50);
+  staggerSeed = 42;
+  updatePreviewBg();
+  updateReadouts();
+  scheduleRender();
+}
+
+function loadSourceCanvas(img, outW) {
+  const aspect = img.width / img.height;
+  const outH = Math.round(outW / aspect);
+  const canvas = document.createElement('canvas');
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0, outW, outH);
+  return canvas;
+}
+
+function buildColumnLayout(W, stripCount, gapWidth) {
+  const gaps = Math.max(0, stripCount - 1) * gapWidth;
+  const base = Math.floor((W - gaps) / stripCount);
+  const widths = new Array(stripCount).fill(base);
+  let extra = W - gaps - base * stripCount;
+  for (let i = 0; extra > 0; i++, extra--) widths[i % stripCount]++;
+  const xs = [];
+  let x = 0;
+  for (let i = 0; i < stripCount; i++) {
+    xs.push(x);
+    x += widths[i] + gapWidth;
+  }
+  return { xs, widths };
+}
+
+function averageColor(data, W, H, x0, y0, w, h) {
+  const xStart = clamp(Math.floor(x0), 0, W - 1);
+  const yStart = clamp(Math.floor(y0), 0, H - 1);
+  const xEnd = clamp(Math.ceil(x0 + w), 0, W);
+  const yEnd = clamp(Math.ceil(y0 + h), 0, H);
+
+  let r = 0, g = 0, b = 0, count = 0;
+  for (let y = yStart; y < yEnd; y++) {
+    for (let x = xStart; x < xEnd; x++) {
+      const i = (y * W + x) * 4;
+      r += data[i];
+      g += data[i + 1];
+      b += data[i + 2];
+      count++;
+    }
+  }
+  if (!count) return { r: 0, g: 0, b: 0 };
+  return {
+    r: Math.round(r / count),
+    g: Math.round(g / count),
+    b: Math.round(b / count),
+  };
+}
+
+function applyGrain(ctx, W, H, amount) {
+  if (amount <= 0) return;
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const d = imageData.data;
+  const strength = amount / 100 * 55;
+
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * strength;
+    d[i] = clamp(Math.round(d[i] + n), 0, 255);
+    d[i + 1] = clamp(Math.round(d[i + 1] + (Math.random() - 0.5) * strength), 0, 255);
+    d[i + 2] = clamp(Math.round(d[i + 2] + (Math.random() - 0.5) * strength), 0, 255);
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function columnOffset(col, stagger, staggerMode, staggerPx, stripCount, rng) {
+  if (!stagger || staggerPx <= 0) return 0;
+  if (staggerMode === 'random') {
+    return Math.floor(rng() * (staggerPx + 1));
+  }
+  return col % 2 === 1 ? staggerPx : 0;
+}
+
+function buildColumnOffsets(stripCount, stagger, staggerMode, staggerPx) {
+  const rng = seededRandom(staggerSeed);
+  const offsets = new Array(stripCount);
+  for (let col = 0; col < stripCount; col++) {
+    offsets[col] = columnOffset(col, stagger, staggerMode, staggerPx, stripCount, rng);
+  }
+  return offsets;
+}
+
+function pixelate(sourceCanvas) {
+  const W = sourceCanvas.width;
+  const H = sourceCanvas.height;
+  const stripCount = int('stripCount');
+  const gapWidth = int('gapWidth');
+  const blockH = int('blockH');
+  const grain = int('grain');
+  const stagger = document.getElementById('stagger').checked;
+  const staggerMode = val('staggerMode');
+  const staggerPx = Math.round(blockH * int('staggerAmount') / 100);
+  const bgColor = val('bgMode') === 'white' ? '#ffffff' : '#000000';
+  const { xs, widths } = buildColumnLayout(W, stripCount, gapWidth);
+  const columnOffsets = buildColumnOffsets(stripCount, stagger, staggerMode, staggerPx);
+
+  const out = document.createElement('canvas');
+  out.width = W;
+  out.height = H;
+  const outCtx = out.getContext('2d', { willReadFrequently: true });
+  outCtx.imageSmoothingEnabled = false;
+
+  outCtx.fillStyle = bgColor;
+  outCtx.fillRect(0, 0, W, H);
+
+  const srcData = sourceCanvas.getContext('2d', { willReadFrequently: true })
+    .getImageData(0, 0, W, H).data;
+
+  for (let col = 0; col < stripCount; col++) {
+    const x = xs[col];
+    const w = widths[col];
+    const startOffset = columnOffsets[col];
+
+    for (let y = -startOffset; y < H; y += blockH) {
+      const drawTop = Math.max(0, y);
+      const drawBottom = Math.min(y + blockH, H);
+      const h = drawBottom - drawTop;
+      if (h <= 0) continue;
+
+      const { r, g, b } = averageColor(srcData, W, H, x, drawTop, w, h);
+      outCtx.fillStyle = `rgb(${r},${g},${b})`;
+      outCtx.fillRect(x, drawTop, w, h);
+    }
+  }
+
+  applyGrain(outCtx, W, H, grain);
+  return out;
+}
+
+function render() {
+  const wrap = document.getElementById('canvas-wrap');
+
+  if (!uploadedImage) {
+    wrap.innerHTML = '<div class="empty-state" id="emptyState">Upload an image to begin</div>';
+    return;
+  }
+
+  const source = loadSourceCanvas(uploadedImage, int('outWidth'));
+  const result = pixelate(source);
+
+  updatePreviewBg();
+  wrap.innerHTML = '';
+  wrap.appendChild(result);
+}
+
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(render, 16);
+}
+
+function handleImageUpload(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    uploadedImage = img;
+    reshuffleStagger();
+    render();
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => URL.revokeObjectURL(url);
+  img.src = url;
+}
+
+function clearImage() {
+  uploadedImage = null;
+  document.getElementById('imageUpload').value = '';
+  document.getElementById('canvas-wrap').innerHTML =
+    '<div class="empty-state" id="emptyState">Upload an image to begin</div>';
+}
+
+function downloadPNG() {
+  const canvas = document.querySelector('#canvas-wrap canvas');
+  if (!canvas) return;
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = 'vertical-pixelator.png';
+  a.click();
+}
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('imageUpload');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) handleImageUpload(file);
+});
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) handleImageUpload(file);
+});
+
+['outWidth', 'stripCount', 'gapWidth', 'blockH', 'staggerAmount', 'grain'].forEach((id) => {
+  document.getElementById(id).addEventListener('input', () => {
+    updateReadouts();
+    scheduleRender();
+  });
+});
+
+document.getElementById('stagger').addEventListener('change', () => {
+  updateReadouts();
+  scheduleRender();
+});
+document.getElementById('staggerMode').addEventListener('change', () => {
+  if (val('staggerMode') === 'random') reshuffleStagger();
+  updateReadouts();
+  scheduleRender();
+});
+document.getElementById('bgMode').addEventListener('change', () => {
+  updatePreviewBg();
+  scheduleRender();
+});
+
+updateReadouts();
+updatePreviewBg();
+</script>
+</body>
+</html>
