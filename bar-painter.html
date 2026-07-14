@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bar Painter</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #0e0e0e;
+    color: #eee;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  header { margin-bottom: 1.5rem; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  p.sub { font-size: 14px; color: #888; margin-top: 4px; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .sidebar {
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid #2a2a2a;
+  }
+  .ctrl { margin-bottom: 14px; }
+  .ctrl label {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 4px;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ctrl-row input[type=range] { flex: 1; accent-color: #fff; }
+  .ctrl-row span { font-size: 13px; font-weight: 500; min-width: 40px; text-align: right; color: #ccc; }
+  input[type=color] {
+    width: 100%;
+    height: 36px;
+    padding: 2px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    cursor: pointer;
+    background: #111;
+  }
+  input[type=number] {
+    flex: 1;
+    padding: 8px 10px;
+    font-size: 13px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    background: #111;
+    color: #eee;
+  }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button { opacity: 1; }
+
+  .mode-row {
+    display: flex;
+    gap: 6px;
+  }
+  .mode-btn {
+    flex: 1;
+    padding: 8px 10px;
+    font-size: 12px;
+    border: 1px solid #333;
+    border-radius: 8px;
+    background: #111;
+    color: #888;
+    cursor: pointer;
+  }
+  .mode-btn.active {
+    background: #fff;
+    color: #111;
+    border-color: #fff;
+  }
+
+  .btn-row { display: flex; gap: 8px; margin-top: 1rem; flex-wrap: wrap; }
+  button {
+    flex: 1;
+    padding: 8px 14px;
+    font-size: 13px;
+    border: 1px solid #444;
+    border-radius: 8px;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:hover { background: #222; }
+  button.primary { background: #fff; color: #111; border-color: #fff; }
+  button.primary:hover { background: #ddd; }
+
+  .file-btn {
+    width: 100%;
+    flex: none;
+  }
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #ccc;
+    cursor: pointer;
+  }
+  .check-row input { accent-color: #fff; cursor: pointer; }
+
+  #video-controls { display: none; }
+  #source-video {
+    width: 100%;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    background: #000;
+  }
+
+  .hint {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.45;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #2a2a2a;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #555;
+    margin: 18px 0 10px;
+    padding-top: 14px;
+    border-top: 1px solid #2a2a2a;
+  }
+  .section-label:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .preview {
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid #2a2a2a;
+    max-height: calc(100vh - 4rem);
+    overflow: auto;
+  }
+  #canvas-wrap {
+    border-radius: 8px;
+    overflow: hidden;
+    line-height: 0;
+  }
+  #canvas-wrap svg {
+    display: block;
+    width: 100%;
+    cursor: crosshair;
+    touch-action: none;
+    user-select: none;
+  }
+  #canvas-wrap svg.erasing { cursor: cell; }
+
+  #export-status {
+    font-size: 11px;
+    color: #888;
+    min-height: 16px;
+    margin-top: 8px;
+  }
+  button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Bar Painter</h1>
+  <p class="sub" id="canvas-subtitle">Paint on vertical bar segments</p>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="ctrl">
+      <label>Tool</label>
+      <div class="mode-row">
+        <button type="button" class="mode-btn active" id="mode-paint" data-mode="paint">Paint</button>
+        <button type="button" class="mode-btn" id="mode-erase" data-mode="erase">Erase</button>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Brush size</label>
+      <div class="ctrl-row">
+        <input type="range" id="brush" min="1" max="16" value="3" step="1">
+        <span id="brush-v">3</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Bars</label>
+      <div class="ctrl-row">
+        <input type="range" id="bars" min="12" max="200" value="42" step="1">
+        <span id="bars-v">42</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Bar width</label>
+      <div class="ctrl-row">
+        <input type="range" id="barWidth" min="1" max="12" value="3" step="1">
+        <span id="barWidth-v">3</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Gap</label>
+      <div class="ctrl-row">
+        <input type="range" id="gap" min="1" max="16" value="4" step="1">
+        <span id="gap-v">4</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Segments (height)</label>
+      <div class="ctrl-row">
+        <input type="range" id="segments" min="16" max="240" value="48" step="1">
+        <span id="segments-v">48</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Canvas width</label>
+      <div class="ctrl-row">
+        <input type="number" id="canvasWidth" min="200" max="4096" value="1692" step="1">
+        <span>px</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Canvas height</label>
+      <div class="ctrl-row">
+        <input type="number" id="canvasHeight" min="100" max="4096" value="430" step="1">
+        <span>px</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Paint color</label>
+      <input type="color" id="paintColor" value="#ffffff">
+    </div>
+
+    <div class="ctrl">
+      <label>Bar color</label>
+      <input type="color" id="barColor" value="#3a3a3a">
+    </div>
+
+    <div class="ctrl">
+      <label>Background</label>
+      <input type="color" id="bgColor" value="#000000">
+    </div>
+
+    <p class="section-label">Import</p>
+
+    <div class="ctrl">
+      <label>Upload image</label>
+      <input type="file" id="imageUpload" accept="image/*" hidden>
+      <button type="button" class="file-btn" onclick="document.getElementById('imageUpload').click()">Choose image</button>
+    </div>
+
+    <div class="ctrl">
+      <label>Upload video</label>
+      <input type="file" id="videoUpload" accept="video/*" hidden>
+      <button type="button" class="file-btn" onclick="document.getElementById('videoUpload').click()">Choose video</button>
+    </div>
+
+    <div id="video-controls">
+      <video id="source-video" playsinline muted></video>
+      <div class="ctrl">
+        <label>Frame</label>
+        <div class="ctrl-row">
+          <input type="range" id="videoScrub" min="0" max="1000" value="0" step="1">
+          <span id="videoTime-v">0:00</span>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button type="button" id="videoPlayBtn">Play</button>
+        <button type="button" onclick="captureVideoFrame()">Capture frame</button>
+      </div>
+      <div class="ctrl">
+        <label class="check-row">
+          <input type="checkbox" id="liveVideo">
+          Live preview while playing
+        </label>
+      </div>
+
+      <div class="ctrl">
+        <label>Export FPS</label>
+        <div class="ctrl-row">
+          <input type="range" id="exportFps" min="8" max="30" value="24" step="1">
+          <span id="exportFps-v">24</span>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="primary" id="downloadVideoBtn" onclick="downloadVideo()" disabled>Download MP4</button>
+      </div>
+      <p id="export-status"></p>
+      <p class="hint" id="export-size-hint" style="margin-top:8px;padding-top:0;border-top:none;">Exports MP4 at canvas size.</p>
+    </div>
+
+    <div class="ctrl">
+      <label>Import detail (bars)</label>
+      <div class="ctrl-row">
+        <input type="range" id="importDetail" min="40" max="180" value="100" step="1">
+        <span id="importDetail-v">100</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label>Height detail</label>
+      <div class="ctrl-row">
+        <input type="range" id="heightDetail" min="100" max="250" value="160" step="5">
+        <span id="heightDetail-v">160%</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label class="check-row">
+        <input type="checkbox" id="autoFit" checked>
+        Auto-fit grid on upload
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button type="button" onclick="applyProfilePreset()">Profile preset</button>
+      <button type="button" onclick="refitImage()">Re-fit image</button>
+    </div>
+
+    <div class="ctrl">
+      <label>Threshold</label>
+      <div class="ctrl-row">
+        <input type="range" id="threshold" min="0" max="255" value="140" step="1">
+        <span id="threshold-v">140</span>
+      </div>
+    </div>
+
+    <div class="ctrl">
+      <label class="check-row">
+        <input type="checkbox" id="invert">
+        Invert (paint dark areas)
+      </label>
+    </div>
+
+    <div class="btn-row">
+      <button type="button" onclick="clearCanvas()">Clear</button>
+      <button type="button" class="primary" onclick="downloadSVG()">Download SVG</button>
+    </div>
+
+    <p class="hint">Click and drag to paint. Hold <kbd>Shift</kbd> to erase. Adjust canvas width and height above.</p>
+  </aside>
+
+  <div class="preview">
+    <div id="canvas-wrap"></div>
+  </div>
+</div>
+
+<script>
+let cols = 42;
+let rows = 48;
+let barW = 3;
+let gap = 4;
+let brush = 3;
+let mode = 'paint';
+let grid = [];
+let painting = false;
+let lastCell = null;
+let uploadedImage = null;
+let uploadedVideo = null;
+let videoUrl = null;
+let videoRaf = null;
+let videoLastLiveUpdate = 0;
+let exporting = false;
+
+const gridResizeIds = ['bars', 'segments'];
+const gridVisualIds = ['barWidth', 'gap', 'canvasWidth', 'canvasHeight'];
+const LIVE_VIDEO_INTERVAL = 100;
+let canvasWVal = 1692;
+let canvasHVal = 430;
+
+function sourceDimensions(source) {
+  return {
+    width: source.videoWidth || source.naturalWidth || source.width,
+    height: source.videoHeight || source.naturalHeight || source.height,
+  };
+}
+
+function activeSource() {
+  return uploadedVideo || uploadedImage;
+}
+
+function segTop(r) {
+  return Math.round((canvasHVal * r) / rows);
+}
+
+function segBottom(r) {
+  return Math.round((canvasHVal * (r + 1)) / rows);
+}
+
+function barMetrics() {
+  const weight = barW + gap;
+  const gapPx = weight > 0 ? Math.max(0, Math.round((canvasWVal * gap) / (cols * weight))) : 0;
+  const totalGaps = gapPx * Math.max(cols - 1, 0);
+  const barWpx = (canvasWVal - totalGaps) / cols;
+  return { gapPx, barWpx };
+}
+
+function barLayout(c) {
+  const { gapPx, barWpx } = barMetrics();
+  const x = Math.round(c * barWpx + c * gapPx);
+  const w = c === cols - 1 ? canvasWVal - x : Math.round(barWpx);
+  return { x, w: Math.max(1, w) };
+}
+
+function segH() { return canvasHVal / rows; }
+
+function canvasW() { return canvasWVal; }
+function canvasH() { return canvasHVal; }
+
+function readCanvasSize() {
+  canvasWVal = clamp(int('canvasWidth'), 200, 4096);
+  canvasHVal = clamp(int('canvasHeight'), 100, 4096);
+  document.getElementById('canvasWidth').value = canvasWVal;
+  document.getElementById('canvasHeight').value = canvasHVal;
+}
+
+function updateCanvasLabels() {
+  const label = `${canvasWVal}×${canvasHVal}`;
+  const sub = document.getElementById('canvas-subtitle');
+  if (sub) sub.textContent = `Paint on vertical bar segments — ${label} canvas`;
+  const exportHint = document.getElementById('export-size-hint');
+  if (exportHint) exportHint.textContent = `Exports MP4 at ${label}.`;
+}
+
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+
+function setSlider(id, value) {
+  const el = document.getElementById(id);
+  el.value = value;
+}
+
+function initGrid() {
+  grid = Array.from({ length: cols }, () => Array(rows).fill(false));
+}
+
+function val(id) { return document.getElementById(id).value; }
+function int(id) { return parseInt(val(id), 10); }
+function num(id) { return parseFloat(val(id)); }
+
+function updateReadouts() {
+  document.getElementById('brush-v').textContent = val('brush');
+  document.getElementById('bars-v').textContent = val('bars');
+  document.getElementById('barWidth-v').textContent = val('barWidth');
+  document.getElementById('gap-v').textContent = val('gap');
+  document.getElementById('segments-v').textContent = val('segments');
+  document.getElementById('threshold-v').textContent = val('threshold');
+  document.getElementById('importDetail-v').textContent = val('importDetail');
+  document.getElementById('heightDetail-v').textContent = val('heightDetail') + '%';
+  const exportFpsEl = document.getElementById('exportFps-v');
+  if (exportFpsEl) exportFpsEl.textContent = val('exportFps');
+}
+
+function readParams() {
+  cols = int('bars');
+  rows = int('segments');
+  barW = int('barWidth');
+  gap = int('gap');
+  brush = int('brush');
+  readCanvasSize();
+}
+
+function segmentFill(c, r) {
+  return grid[c][r] ? val('paintColor') : val('barColor');
+}
+
+function render() {
+  const W = canvasWVal;
+  const H = canvasHVal;
+  const bg = val('bgColor');
+  let rects = '';
+
+  for (let c = 0; c < cols; c++) {
+    const { x, w } = barLayout(c);
+    for (let r = 0; r < rows; r++) {
+      const y = segTop(r);
+      const h = segBottom(r) - y;
+      rects += `<rect id="seg-${c}-${r}" x="${x}" y="${y}" width="${w}" height="${h}" fill="${segmentFill(c, r)}"/>`;
+    }
+  }
+
+  const wrap = document.getElementById('canvas-wrap');
+  wrap.innerHTML =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;height:auto" shape-rendering="crispEdges" id="main-svg">
+  <rect id="bg-rect" width="${W}" height="${H}" fill="${bg}"/>
+  ${rects}
+</svg>`;
+
+  const svg = document.getElementById('main-svg');
+  svg.classList.toggle('erasing', mode === 'erase');
+  bindPaintEvents(svg);
+}
+
+function syncGridToDOM() {
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const el = document.getElementById(`seg-${c}-${r}`);
+      if (el) el.setAttribute('fill', segmentFill(c, r));
+    }
+  }
+}
+
+function refreshColors() {
+  const bg = val('bgColor');
+  const bgEl = document.getElementById('bg-rect');
+  if (bgEl) bgEl.setAttribute('fill', bg);
+  syncGridToDOM();
+}
+
+function formatTime(seconds) {
+  if (!Number.isFinite(seconds)) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function updateVideoReadout() {
+  const el = document.getElementById('videoTime-v');
+  if (!el || !uploadedVideo) return;
+  el.textContent = formatTime(uploadedVideo.currentTime);
+}
+
+function syncVideoScrub() {
+  if (!uploadedVideo || !uploadedVideo.duration) return;
+  const scrub = document.getElementById('videoScrub');
+  scrub.value = Math.round((uploadedVideo.currentTime / uploadedVideo.duration) * 1000);
+  updateVideoReadout();
+}
+
+function showVideoControls(show) {
+  document.getElementById('video-controls').style.display = show ? 'block' : 'none';
+  document.getElementById('downloadVideoBtn').disabled = !show || exporting;
+}
+
+function setExportStatus(text) {
+  const el = document.getElementById('export-status');
+  if (el) el.textContent = text;
+}
+
+function stopVideoPlayback() {
+  if (uploadedVideo) uploadedVideo.pause();
+  if (videoRaf) {
+    cancelAnimationFrame(videoRaf);
+    videoRaf = null;
+  }
+  document.getElementById('videoPlayBtn').textContent = 'Play';
+}
+
+function clearVideo() {
+  stopVideoPlayback();
+  if (videoUrl) URL.revokeObjectURL(videoUrl);
+  videoUrl = null;
+  uploadedVideo = null;
+  const video = document.getElementById('source-video');
+  video.removeAttribute('src');
+  video.load();
+  document.getElementById('videoUpload').value = '';
+  document.getElementById('videoScrub').value = 0;
+  updateVideoReadout();
+  showVideoControls(false);
+}
+
+function fitGridToSource(source) {
+  const { width, height } = sourceDimensions(source);
+  if (!width || !height) return;
+
+  const detail = int('importDetail');
+  const heightBoost = num('heightDetail') / 100;
+  const aspect = width / height;
+  let targetCols;
+  let targetRows;
+
+  if (aspect >= 1) {
+    targetCols = detail;
+    targetRows = Math.round(detail / aspect * heightBoost);
+  } else {
+    targetRows = Math.round(detail * heightBoost);
+    targetCols = Math.round(targetRows * aspect);
+  }
+
+  targetCols = clamp(targetCols, 12, 200);
+  targetRows = clamp(targetRows, 16, 240);
+
+  setSlider('bars', targetCols);
+  setSlider('segments', targetRows);
+
+  if (targetCols >= 120) {
+    setSlider('barWidth', 2);
+    setSlider('gap', 2);
+  } else if (targetCols >= 80) {
+    setSlider('barWidth', 2);
+    setSlider('gap', 3);
+  }
+
+  updateReadouts();
+  readParams();
+  initGrid();
+  render();
+}
+
+function applyProfilePreset() {
+  setSlider('importDetail', 120);
+  setSlider('heightDetail', 200);
+  setSlider('barWidth', 2);
+  setSlider('gap', 2);
+  document.getElementById('autoFit').checked = true;
+  updateReadouts();
+  const source = activeSource();
+  if (source) {
+    fitGridToSource(source);
+    applySourceToGrid(source);
+  }
+}
+
+function refitImage() {
+  const source = activeSource();
+  if (!source) return;
+  fitGridToSource(source);
+  applySourceToGrid(source);
+}
+
+function applySourceToGrid(source, syncDom = true) {
+  const { width: sw, height: sh } = sourceDimensions(source);
+  if (!sw || !sh) return;
+
+  const sampleW = cols;
+  const sampleH = rows;
+  const canvas = document.createElement('canvas');
+  canvas.width = sampleW;
+  canvas.height = sampleH;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, sampleW, sampleH);
+
+  const scale = Math.min(sampleW / sw, sampleH / sh);
+  const w = sw * scale;
+  const h = sh * scale;
+  const x = (sampleW - w) / 2;
+  const y = (sampleH - h) / 2;
+  ctx.drawImage(source, x, y, w, h);
+
+  const { data } = ctx.getImageData(0, 0, sampleW, sampleH);
+  const threshold = int('threshold');
+  const invert = document.getElementById('invert').checked;
+
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const i = (r * sampleW + c) * 4;
+      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      const alpha = data[i + 3];
+      let on = alpha > 64 && lum >= threshold;
+      if (invert) on = alpha > 64 && lum < threshold;
+      grid[c][r] = on;
+    }
+  }
+  if (syncDom) syncGridToDOM();
+}
+
+function drawGridToCanvas(ctx, width = canvasWVal, height = canvasHVal) {
+  ctx.fillStyle = val('bgColor');
+  ctx.fillRect(0, 0, width, height);
+  const scaleX = width / canvasWVal;
+  const scaleY = height / canvasHVal;
+  for (let c = 0; c < cols; c++) {
+    const { x, w } = barLayout(c);
+    const bx = Math.round(x * scaleX);
+    const bw = Math.max(1, Math.round(w * scaleX));
+    for (let r = 0; r < rows; r++) {
+      const y = Math.round(segTop(r) * scaleY);
+      const h = Math.max(1, Math.round((segBottom(r) - segTop(r)) * scaleY));
+      ctx.fillStyle = segmentFill(c, r);
+      ctx.fillRect(bx, y, bw, h);
+    }
+  }
+}
+
+function exportDimensions() {
+  return { width: canvasWVal, height: canvasHVal };
+}
+
+async function pickH264Codec(width, height) {
+  const candidates = ['avc1.640028', 'avc1.4D4028', 'avc1.42E01E'];
+  for (const codec of candidates) {
+    const support = await VideoEncoder.isConfigSupported({
+      codec,
+      width,
+      height,
+      bitrate: 25_000_000,
+      framerate: 30,
+    });
+    if (support.supported) return codec;
+  }
+  return null;
+}
+
+async function loadMp4Muxer() {
+  return import('https://esm.sh/mp4-muxer@5.1.3');
+}
+
+function waitForSeek(video, time) {
+  return new Promise((resolve) => {
+    const target = clamp(time, 0, Math.max(video.duration - 0.001, 0));
+    if (Math.abs(video.currentTime - target) < 0.001) {
+      resolve();
+      return;
+    }
+    const onSeeked = () => {
+      video.removeEventListener('seeked', onSeeked);
+      resolve();
+    };
+    video.addEventListener('seeked', onSeeked);
+    video.currentTime = target;
+  });
+}
+
+async function exportWithMediaRecorderMp4(video, canvas, ctx, exportW, exportH, fps, frameCount, duration) {
+  const mimeType = ['video/mp4', 'video/mp4; codecs=avc1', 'video/mp4; codecs=h264']
+    .find((type) => MediaRecorder.isTypeSupported(type));
+  if (!mimeType) throw new Error('MP4 MediaRecorder unavailable');
+
+  const stream = canvas.captureStream(0);
+  const track = stream.getVideoTracks()[0];
+  const recorder = new MediaRecorder(stream, {
+    mimeType,
+    videoBitsPerSecond: 25_000_000,
+  });
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  const stopped = new Promise((resolve) => { recorder.onstop = resolve; });
+  const frameDelay = 1000 / fps;
+
+  recorder.start();
+  for (let i = 0; i < frameCount; i++) {
+    const t = Math.min(i / fps, Math.max(duration - 0.001, 0));
+    await waitForSeek(video, t);
+    applySourceToGrid(video, false);
+    drawGridToCanvas(ctx, exportW, exportH);
+    if (track.requestFrame) track.requestFrame();
+    setExportStatus(`Exporting ${exportW}×${exportH} MP4… ${Math.round(((i + 1) / frameCount) * 100)}%`);
+    await new Promise((resolve) => setTimeout(resolve, frameDelay));
+  }
+  recorder.stop();
+  await stopped;
+  return new Blob(chunks, { type: mimeType });
+}
+
+async function downloadVideo() {
+  if (!uploadedVideo || exporting) return;
+  if (typeof MediaRecorder === 'undefined' && typeof VideoEncoder === 'undefined') {
+    setExportStatus('Video export is not supported in this browser.');
+    return;
+  }
+
+  exporting = true;
+  const btn = document.getElementById('downloadVideoBtn');
+  btn.disabled = true;
+  stopVideoPlayback();
+
+  const video = uploadedVideo;
+  const savedTime = video.currentTime;
+  const fps = int('exportFps');
+  const duration = video.duration;
+  const frameCount = Math.max(1, Math.ceil(duration * fps));
+  const { width: exportW, height: exportH } = exportDimensions();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = exportW;
+  canvas.height = exportH;
+  const ctx = canvas.getContext('2d', { alpha: false });
+
+  try {
+    setExportStatus(`Preparing ${exportW}×${exportH} export…`);
+    let blob = null;
+
+    if (typeof VideoEncoder !== 'undefined' && typeof VideoFrame !== 'undefined') {
+      try {
+        const { Muxer, ArrayBufferTarget } = await loadMp4Muxer();
+        const codec = await pickH264Codec(exportW, exportH);
+        if (!codec) throw new Error('No H.264 codec');
+
+        const muxer = new Muxer({
+          target: new ArrayBufferTarget(),
+          video: { codec: 'avc', width: exportW, height: exportH },
+          fastStart: 'in-memory',
+        });
+
+        const encoder = new VideoEncoder({
+          output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+          error: (err) => { throw err; },
+        });
+
+        encoder.configure({
+          codec,
+          width: exportW,
+          height: exportH,
+          bitrate: 25_000_000,
+          framerate: fps,
+        });
+
+        const frameDuration = Math.round(1_000_000 / fps);
+
+        for (let i = 0; i < frameCount; i++) {
+          const t = Math.min(i / fps, Math.max(duration - 0.001, 0));
+          await waitForSeek(video, t);
+          applySourceToGrid(video, false);
+          drawGridToCanvas(ctx, exportW, exportH);
+
+          const frame = new VideoFrame(canvas, {
+            timestamp: i * frameDuration,
+            duration: frameDuration,
+          });
+          encoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
+          frame.close();
+
+          setExportStatus(`Exporting ${exportW}×${exportH} MP4… ${Math.round(((i + 1) / frameCount) * 100)}%`);
+        }
+
+        await encoder.flush();
+        encoder.close();
+        muxer.finalize();
+        blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+      } catch (webCodecsErr) {
+        console.warn('WebCodecs export failed, trying MediaRecorder…', webCodecsErr);
+      }
+    }
+
+    if (!blob) {
+      blob = await exportWithMediaRecorderMp4(video, canvas, ctx, exportW, exportH, fps, frameCount, duration);
+    }
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `bar-painter-${exportW}x${exportH}.mp4`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setExportStatus(`Export complete (${exportW}×${exportH}).`);
+  } catch (err) {
+    setExportStatus('Export failed. Use Chrome, Edge, or Safari.');
+    console.error(err);
+  } finally {
+    exporting = false;
+    btn.disabled = false;
+    await waitForSeek(video, savedTime);
+    applySourceToGrid(video);
+    syncVideoScrub();
+    setTimeout(() => setExportStatus(''), 4000);
+  }
+}
+
+function applyImageToGrid(img) {
+  applySourceToGrid(img);
+}
+
+function handleImageUpload(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  clearVideo();
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    uploadedImage = img;
+    if (document.getElementById('autoFit').checked) fitGridToSource(img);
+    applySourceToGrid(img);
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => URL.revokeObjectURL(url);
+  img.src = url;
+}
+
+function handleVideoUpload(file) {
+  if (!file || !file.type.startsWith('video/')) return;
+  uploadedImage = null;
+  document.getElementById('imageUpload').value = '';
+  clearVideo();
+
+  videoUrl = URL.createObjectURL(file);
+  const video = document.getElementById('source-video');
+  video.src = videoUrl;
+  video.onloadedmetadata = () => {
+    uploadedVideo = video;
+    showVideoControls(true);
+    document.getElementById('videoScrub').value = 0;
+    updateVideoReadout();
+    if (document.getElementById('autoFit').checked) fitGridToSource(video);
+    video.currentTime = 0;
+  };
+  video.onloadeddata = () => {
+    applySourceToGrid(video);
+  };
+  video.onended = () => stopVideoPlayback();
+}
+
+function seekVideoFromScrub() {
+  if (!uploadedVideo || !uploadedVideo.duration) return;
+  stopVideoPlayback();
+  const t = (int('videoScrub') / 1000) * uploadedVideo.duration;
+  uploadedVideo.currentTime = t;
+  updateVideoReadout();
+  applySourceToGrid(uploadedVideo);
+}
+
+function captureVideoFrame() {
+  if (!uploadedVideo) return;
+  applySourceToGrid(uploadedVideo);
+}
+
+function toggleVideoPlayback() {
+  if (!uploadedVideo) return;
+  const btn = document.getElementById('videoPlayBtn');
+  if (!uploadedVideo.paused) {
+    stopVideoPlayback();
+    return;
+  }
+
+  uploadedVideo.play();
+  btn.textContent = 'Pause';
+  videoLastLiveUpdate = 0;
+
+  function tick() {
+    syncVideoScrub();
+    if (document.getElementById('liveVideo').checked) {
+      const now = performance.now();
+      if (now - videoLastLiveUpdate >= LIVE_VIDEO_INTERVAL) {
+        applySourceToGrid(uploadedVideo);
+        videoLastLiveUpdate = now;
+      }
+    }
+    if (!uploadedVideo.paused) {
+      videoRaf = requestAnimationFrame(tick);
+    } else {
+      stopVideoPlayback();
+    }
+  }
+
+  videoRaf = requestAnimationFrame(tick);
+}
+
+function cellFromEvent(e, svg) {
+  const rect = svg.getBoundingClientRect();
+  const sx = ((e.clientX - rect.left) / rect.width) * canvasWVal;
+  const sy = ((e.clientY - rect.top) / rect.height) * canvasHVal;
+  const c = clamp(Math.floor((sx / canvasWVal) * cols), 0, cols - 1);
+  const r = clamp(Math.floor((sy / canvasHVal) * rows), 0, rows - 1);
+  return { c, r };
+}
+
+function inBounds(c, r) {
+  return c >= 0 && c < cols && r >= 0 && r < rows;
+}
+
+function applyBrush(c, r, value) {
+  const half = Math.floor(brush / 2);
+  const startC = c - half;
+  const startR = r - half;
+  const fill = value ? val('paintColor') : val('barColor');
+  for (let dc = 0; dc < brush; dc++) {
+    for (let dr = 0; dr < brush; dr++) {
+      const cc = startC + dc;
+      const rr = startR + dr;
+      if (!inBounds(cc, rr) || grid[cc][rr] === value) continue;
+      grid[cc][rr] = value;
+      const el = document.getElementById(`seg-${cc}-${rr}`);
+      if (el) el.setAttribute('fill', fill);
+    }
+  }
+}
+
+function strokeBetween(a, b, value) {
+  if (!a || !b) return;
+  const dc = Math.abs(b.c - a.c);
+  const dr = Math.abs(b.r - a.r);
+  const steps = Math.max(dc, dr, 1);
+  for (let i = 0; i <= steps; i++) {
+    const t = steps === 0 ? 0 : i / steps;
+    const c = Math.round(a.c + (b.c - a.c) * t);
+    const r = Math.round(a.r + (b.r - a.r) * t);
+    applyBrush(c, r, value);
+  }
+}
+
+function paintAt(e, svg) {
+  const cell = cellFromEvent(e, svg);
+  if (!inBounds(cell.c, cell.r)) return;
+  const erase = mode === 'erase' || e.shiftKey;
+  const value = !erase;
+  strokeBetween(lastCell, cell, value);
+  lastCell = cell;
+}
+
+function bindPaintEvents(svg) {
+  svg.onpointerdown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    painting = true;
+    lastCell = null;
+    svg.setPointerCapture(e.pointerId);
+    paintAt(e, svg);
+  };
+  svg.onpointermove = (e) => {
+    if (!painting) return;
+    paintAt(e, svg);
+  };
+  svg.onpointerup = svg.onpointercancel = () => {
+    painting = false;
+    lastCell = null;
+  };
+  svg.oncontextmenu = (e) => e.preventDefault();
+}
+
+function rebuild(resize = true) {
+  readParams();
+  if (resize) initGrid();
+  render();
+  const source = activeSource();
+  if (source) applySourceToGrid(source);
+}
+
+function refreshLayout() {
+  readParams();
+  updateCanvasLabels();
+  render();
+}
+
+function clearCanvas() {
+  uploadedImage = null;
+  document.getElementById('imageUpload').value = '';
+  clearVideo();
+  initGrid();
+  render();
+}
+
+function downloadSVG() {
+  const svg = document.getElementById('main-svg');
+  if (!svg) return;
+  const blob = new Blob(
+    ['<?xml version="1.0" encoding="UTF-8"?>\n', svg.outerHTML],
+    { type: 'image/svg+xml' }
+  );
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bar-painter.svg';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+document.querySelectorAll('.mode-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    mode = btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    const svg = document.getElementById('main-svg');
+    if (svg) svg.classList.toggle('erasing', mode === 'erase');
+  });
+});
+
+document.getElementById('brush').addEventListener('input', () => {
+  readParams();
+  updateReadouts();
+});
+
+gridResizeIds.forEach((id) => {
+  document.getElementById(id).addEventListener('input', () => {
+    updateReadouts();
+    rebuild(true);
+  });
+});
+
+gridVisualIds.forEach((id) => {
+  document.getElementById(id).addEventListener('input', () => {
+    updateReadouts();
+    refreshLayout();
+  });
+});
+
+document.getElementById('imageUpload').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) handleImageUpload(file);
+});
+
+document.getElementById('videoUpload').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) handleVideoUpload(file);
+});
+
+document.getElementById('videoScrub').addEventListener('input', seekVideoFromScrub);
+document.getElementById('videoPlayBtn').addEventListener('click', toggleVideoPlayback);
+
+document.getElementById('threshold').addEventListener('input', () => {
+  document.getElementById('threshold-v').textContent = val('threshold');
+  const source = activeSource();
+  if (source) applySourceToGrid(source);
+});
+
+['importDetail', 'heightDetail'].forEach((id) => {
+  document.getElementById(id).addEventListener('input', () => {
+    updateReadouts();
+  });
+});
+
+document.getElementById('exportFps').addEventListener('input', () => {
+  document.getElementById('exportFps-v').textContent = val('exportFps');
+});
+
+document.getElementById('invert').addEventListener('change', () => {
+  const source = activeSource();
+  if (source) applySourceToGrid(source);
+});
+
+['paintColor', 'barColor', 'bgColor'].forEach((id) => {
+  document.getElementById(id).addEventListener('input', refreshColors);
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Shift') {
+    const svg = document.getElementById('main-svg');
+    if (svg) svg.classList.add('erasing');
+  }
+});
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'Shift' && mode === 'paint') {
+    const svg = document.getElementById('main-svg');
+    if (svg) svg.classList.remove('erasing');
+  }
+});
+
+updateReadouts();
+updateCanvasLabels();
+rebuild();
+</script>
+</body>
+</html>
